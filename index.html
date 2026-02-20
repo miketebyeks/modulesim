@@ -616,43 +616,41 @@ function exportToExcel(){
     ['Time (local)','Solar Hour','Cosine Zenith','Air Mass','Idn (kW/m²)','Output (kWh)'],
   ];
 
-  // Re-run detailed simulation for peak month
-  const mIdx=peakMIdx, day=p.day;
-  const {EoT,decl}=solarParams(dayOfYear(mIdx,day));
-  const lat=p.lat*RAD, tiltAbs=Math.abs(p.tilt)*RAD;
-  const Mx=0,My=Math.sin(tiltAbs),Mz=Math.cos(tiltAbs);
-  const lonCorr=(p.lon-p.tz*15)/15;
-  const dt=12/60;
+  // Re-run detailed simulation for peak month using NOAA engine
+  const mIdx=peakMIdx;
+  const tiltAbs=Math.abs(p.tilt)*RAD;
+  const My=Math.sin(tiltAbs), Mz=Math.cos(tiltAbs);
+  const lat2=p.lat*RAD;
+  const dt2=0.2;
 
   for(let step=0;step<120;step++){
-    const h=step*dt;
+    const h=step*dt2;
     const hh=Math.floor(h), mm=Math.round((h-hh)*60);
     const timeStr=`${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;
-    const HA=(15*(h-lonCorr-EoT/60-12))*RAD;
-    let cosZ=Math.sin(lat)*Math.sin(decl)+Math.cos(lat)*Math.cos(decl)*Math.cos(HA);
-    cosZ=Math.max(-1,Math.min(1,cosZ));
-    if(cosZ<=0){ intervalData.push([timeStr,parseFloat((h-12).toFixed(2)),0,'—','—',0]); continue; }
-    const sinZ=Math.sqrt(1-cosZ*cosZ);
+    const {cosZ:cz0, decl:decl2, HA:HA2}=noaaSolar(mIdx+1,p.day,h,p.lat,p.lon,p.tz);
+    if(cz0<=0){ intervalData.push([timeStr,parseFloat((h-12).toFixed(2)),0,'—','—',0]); continue; }
+    const cosZ2=cz0;
+    const sinZ2=Math.sqrt(Math.max(0,1-cosZ2*cosZ2));
     let azDeg=0;
-    if(sinZ>1e-8){
-      let cAz=(Math.sin(decl)-Math.sin(lat)*cosZ)/(Math.cos(lat)*sinZ);
-      azDeg=Math.acos(Math.max(-1,Math.min(1,cAz)))/RAD;
-      if(HA>0) azDeg=-azDeg;
+    if(sinZ2>1e-8){
+      let cAz2=(Math.sin(decl2)-Math.sin(lat2)*cosZ2)/(Math.cos(lat2)*sinZ2);
+      azDeg=Math.acos(Math.max(-1,Math.min(1,cAz2)))/RAD;
+      if(HA2>0) azDeg=-azDeg;
     }
-    const az=azDeg*RAD;
-    const Sx=sinZ*Math.sin(az),Sy=sinZ*Math.cos(az),Sz=cosZ;
-    const AM=Math.sqrt(1+(Sx*Sx+Sy*Sy)/(Sz*Sz));
-    const Idn=1.353*Math.pow(0.7,Math.pow(AM,0.678));
-    const Idirect=Math.max(0,Sx*Mx+Sy*My+Sz*Mz)*Idn;
-    const Idiffuse=0.1*Idn*(1+Math.cos(tiltAbs))/(1+Sz);
-    const output=(Idirect+Idiffuse)*dt*p.size*(p.eff/100);
+    const az2=azDeg*RAD;
+    const Sy2=sinZ2*Math.cos(az2);
+    const AM2=1/cosZ2;
+    const Idn2=1.353*Math.pow(0.7,Math.pow(AM2,0.678));
+    const frac2=Math.max(0,Sy2*My+cosZ2*Mz);
+    const Idiff2=0.1*Idn2*(1+Math.cos(tiltAbs))/(1+cosZ2);
+    const output2=(frac2*Idn2+Idiff2)*dt2*p.size*(p.eff/100);
     intervalData.push([
       timeStr,
       parseFloat((h-12).toFixed(2)),
-      parseFloat(cosZ.toFixed(4)),
-      parseFloat(AM.toFixed(3)),
-      parseFloat(Idn.toFixed(4)),
-      parseFloat(output.toFixed(4))
+      parseFloat(cosZ2.toFixed(4)),
+      parseFloat(AM2.toFixed(3)),
+      parseFloat(Idn2.toFixed(4)),
+      parseFloat(output2.toFixed(4))
     ]);
   }
 
